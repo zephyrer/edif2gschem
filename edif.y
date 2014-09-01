@@ -4940,7 +4940,7 @@ char *FormString()
  *	It is passed two file streams, the first is where the input comes
  *	from; the second is where error messages get printed.
  */
-ParseEDIF(inp,err)
+int ParseEDIF(inp,err)
 FILE *inp,*err;
 {
   register int i;
@@ -5037,7 +5037,7 @@ FILE *inp,*err;
   /*
    *	Go parse things!
    */
-  yyparse();
+  return yyparse();
 
   // DumpStack();
 }

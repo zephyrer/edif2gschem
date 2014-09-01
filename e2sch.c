@@ -28,6 +28,7 @@ main(int argc, char *argv[])
   char * progname;
   extern int nPages;
   extern struct pwr  *pgs;
+  int err = 0;
 
   progname = strrchr(argv[0],'/');
   if (progname)
@@ -49,7 +50,7 @@ main(int argc, char *argv[])
 
   Libs=NULL; strcpy(fName,"");
   fprintf(stderr, "Parsing %s & writing .sch file\n", InFile);
-  ParseEDIF(FileEdf, stderr) ; 
+  err = ParseEDIF(FileEdf, stderr); 
 
   fprintf(stderr, "\n%s Libs -> cache <<<<\n", progname);
   sprintf(FileNameLib,"%s-cache.lib", fName);
@@ -69,5 +70,5 @@ main(int argc, char *argv[])
 
   fprintf(stderr, " %d Pages\n",nPages);
   fprintf(stderr, " BonJour\n");
-  exit(0);
+  exit(err);
 }
