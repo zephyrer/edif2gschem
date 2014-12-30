@@ -32,7 +32,7 @@ global struct inst *insts, *iptr;
 global struct con  *cons,  *cptr;
 global int    pass2;
 global float  scale;
-global char   fName[SCH_NAME_LEN];
+global char   fName[SCH_NAME_LEN + 1];
 
 LibraryStruct		 *LSptr;
 LibraryEntryStruct	 *LEptr;
@@ -931,7 +931,7 @@ Design 	    :	DESIGN DesignNameDef _Design PopC
 		 strncpy(fName,        $2->s, SCH_NAME_LEN);
 		 if(bug>0)fprintf(Error,"  Set fName '%s'\n", fName);
 		 if( nPages > 1 ){
-        	OpenSch();
+        	OpenSch(50000, 50000); /* psize->nxt->x, psize->nxt->y */
         	OutSheets(pgs);
         	CloseSch();
 		 }
@@ -2203,6 +2203,7 @@ _NumberDefn :
 	    ;
 
 OffPageConn :	OFFPAGECONNECTOR _OffPageConn PopC
+	    | ARRAY
 	    ;
 
 _OffPageConn :	PortNameDef
@@ -2210,6 +2211,7 @@ _OffPageConn :	PortNameDef
 	     |	_OffPageConn Property
 	     |	_OffPageConn Comment
 	     |	_OffPageConn UserData
+	     |	_OffPageConn Str
 	     ;
 
 OffsetEvent :	OFFSETEVENT Event ScaledInt PopC
@@ -2318,25 +2320,28 @@ Page :		PAGE _Page PopC
 		{$$=$2;} 
      ;
 
-_Page :		InstNameDef PageSize
-		{	if(bug>1)fprintf(Error,"\n_Page: InstNameDef? '%s'", $1->s);
-			if(bug>1 && $2)fprintf(Error," PageSize %d %d %d %d",$2->x, $2->y,$2->nxt->x,$2->nxt->y);
-			if(bug>1)fprintf(Error,"\n");
-			strncpy(fName, $1->s, SCH_NAME_LEN);
+_Page :		InstNameDef
+		{	if(bug>1)fprintf(Error,"_Page: InstNameDef? '%s'\n", $1->s);
+			strncpy(fName, $1->s, SCH_NAME_LEN + 1);
+			if (strlen($1->s) > SCH_NAME_LEN) {
+				fName[SCH_NAME_LEN] = '\0';
+				fprintf(Error, "WARNING: '%s' is reduced to '%s'\n", $1->s, fName);
+			}
 			if(bug>1)fprintf(Error,"SchHead INSTANCE fName: '%s' \n", fName);
-			OpenSch(); SchHead=0 ; // fName is Open
+			OpenSch(50000, 50000);	/* No pageSize yet */
+			SchHead = 0;
 
   		 	CurrentLib = (LibraryStruct *) Malloc(sizeof(LibraryStruct));
-  		 	CurrentLib->Name = strdup($1->s);
+  		 	CurrentLib->Name = strdup(fName);
   		 	CurrentLib->isSheet = 1;
 		 	CurrentLib->Entries = NULL; CurrentLib->NumOfParts=0; 
   		 	CurrentLib->nxt = Libs;
 	 	 	Libs=CurrentLib;
 	    	pptr = (struct pwr *) Malloc(sizeof(struct pwr));
-	    	pptr->s   = $1->s; 
+	    	pptr->s   = strdup(fName); 
 	    	pptr->r   = NULL;
-   	    	pptr->nxt = pgs;
-       	    pgs = pptr;
+	    	pptr->nxt = pgs;
+	    	pgs = pptr;
 		 	nPages++;
 		}
       |		_Page Instance
@@ -2503,6 +2508,7 @@ PortNameDef :	NameDef
             New->U.Pin.Len = 300;
             New->U.Pin.PinShape = NONE;		// NONE, DOT, CLOCK, SHORT
 		    New->U.Pin.PinType  = PIN_UNSPECIFIED;
+/* TODO: other pin types */
 		    New->U.Pin.Orient   = 0;
             //New->U.Pin.Flags    = 0;           	// Pin Visible no port property in OrCad Ver 10
 			New->U.Pin.Flags    = (!strncmp($1->s,"OFFPAGE",7)
@@ -3059,7 +3065,7 @@ _StrDisplay :   STR
                 {ref->s=$1->s; ref->p=$2->p;}
             if( !strcmp($2->s, "PARTVALUE"))
                 {val->s=$1->s; val->p=$2->p;}
-            OutText(2, $1->s, $2->p->x +ox, -$2->p->y +oy, TextSize);
+            OutText(TEXT_TEXT, $1->s, $2->p->x +ox, -$2->p->y +oy, TextSize);
          }else{
             if(bug>3)
                 fprintf(Error,"%5d _StrDisplay Disp: '%s' NULL NULL  ts=%d\n",
@@ -3525,9 +3531,9 @@ _Name   :	Ident
 		        if(inst_pin_num_vis==1 || inst_pin_name_vis==1){
 		            if( $1->nxt != NULL && !strcmp($1->nxt->s, "OFFPAGECONNECTOR")) {
 						inst_pin_name_vis=0;
-		    	        OutText(1, s, $2->p->x +ox, -$2->p->y +oy, TextSize);
+		    	        OutText(TEXT_LABEL_GLOBAL, s, $2->p->x +ox, -$2->p->y +oy, TextSize);
 		    	    } else {
-		    	        OutText(0, s, $2->p->x +ox, -$2->p->y +oy, TextSize);
+		    	        OutText(TEXT_LABEL_NORMAL, s, $2->p->x +ox, -$2->p->y +oy, TextSize);
 		    	    }
 		        }
 		        // TextSize=SIZE_PIN_TEXT;
@@ -4283,7 +4289,7 @@ static short f_Number[] = {E,NUMBERDISPLAY,NUMBER};
 static short f_NumberDefinition[] = {SCALE,-GRIDMAP,COMMENT};
 static short f_NumberDisplay[] = {E,DISPLAY};
 static short f_OffPageConnector[] = {
-  NAME,RENAME,-UNUSED,PROPERTY,COMMENT,USERDATA
+  NAME,RENAME,-UNUSED,PROPERTY,COMMENT,USERDATA,ARRAY
 };
 static short f_OffsetEvent[] = {EVENT,E};
 static short f_OpenShape[] = {CURVE,PROPERTY};

@@ -32,6 +32,12 @@
 #define	NORMALIZE_ANGLE(Angle)	{ while (Angle < 0) Angle += 3600; \
 				  while (Angle > 3600) Angle -= 3600; }
 
+typedef enum {
+	TEXT_LABEL_NORMAL = 0,
+	TEXT_LABEL_GLOBAL,
+	TEXT_TEXT,
+} OutTextType;
+
 /* definition des types des structures d'elements de librairie */
 typedef enum {
 	ROOT,		/* La structure est du type LibraryEntryStruct */
@@ -204,7 +210,7 @@ global LibraryStruct          	*Libs,  *CurrentLib, *DesignName, *LSptr;
 global LibraryEntryStruct 		*LibEntry, *LEptr;
 global LibraryDrawEntryStruct 	*Drawing, *LDptr;
 global LibraryFieldEntry		*InsEntry;
-global char 			 		fName[SCH_NAME_LEN];
+global char 			 		fName[SCH_NAME_LEN + 1];
 global struct plst				*psize;
 
 #endif // EELIBSL_H

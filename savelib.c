@@ -59,10 +59,9 @@ OutPro(LibraryStruct * Libs)
   }
 }
 
-OpenSch()
+OpenSch(int x, int y)
 {
   CloseSch(); // close if previous open
-  int x,y;
 	
   sprintf(FileNameEESchema,"%s.sch", fName);
   if( (FileEESchema = fopen( FileNameEESchema, "wt" )) == NULL ) {
@@ -77,8 +76,7 @@ OpenSch()
   fprintf(FileEESchema,"LIBS:");
   fprintf(FileEESchema,"\nEELAYER 24 0\nEELAYER END\n");
 
-  x=psize->nxt->x;
-  y=psize->nxt->y; if(y<0) y= -y;
+  if(y<0) y= -y;
   x += x/10; y += y/10; // make sheet 10% bigger
 //  fprintf(FileEESchema,"$Descr D 34000 22000\n"); // TODO - get size from EDIF
   fprintf(FileEESchema,"$Descr X %d %d\n",x,y); 
