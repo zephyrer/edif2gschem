@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <math.h>
+#include <assert.h>
 
 #define global
 
@@ -26,7 +27,6 @@ enum {TEXT_NO_VISIBLE = 1};
 enum {FILE_NAME_LIM = 128};
 int magn = 1;
 int shift = 10000;
-int font_denom = 13;
 
 /* Used in edif.y */
 struct con *cons = NULL, *cptr = NULL;
@@ -41,6 +41,12 @@ char FileNameLib[FILE_NAME_LIM];
 FILE *FileLib = NULL, *FileKiPro = NULL;
 
 extern int nPages;
+
+#ifdef DEBUG
+# define dprintf(...) fprintf(stderr, __VA_ARGS__)
+#else
+# define dprintf(...)
+#endif
 
 int lib_create(const char *dir_name, LibraryStruct *lib);
 
@@ -67,14 +73,6 @@ int main(int argc, char *argv[])
 	char *lib_dir_name;
 	LibraryStruct *lib_p;
 	int i;
-
-#if 0
-printf("%s\n", pin_name_format("r\\e\\se\\t"));
-printf("%s\n", pin_name_format("r\\e\\set"));
-printf("%s\n", pin_name_format("r\\e\\set\\"));
-printf("%s\n", pin_name_format("\\reset\\\\ab\\"));
-return 0;
-#endif
 
 	prog_name = strrchr(argv[0], '/');
 	if (prog_name)
@@ -153,7 +151,7 @@ typedef enum {LEFT_PIN, RIGHT_PIN} PIN_WHICHEND;
 
 const char *field_id_str(int field_id)
 {
-	static const char *field_id_str[] = {
+	const char *field_id_str[] = {
 		"refdes",
 		"value",
 		"field1",
@@ -254,6 +252,47 @@ printf("DBG: %s  ", str);
 	return p_new;
 }
 
+void attrib_add(FILE *fd, const char *name, const char *value,
+		int x, int y, int color, int size, int visible,
+		int show_name_value, int angle, int alignment)
+{
+	/* TODO: num_lines set as number of '\n' */
+
+	fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n%s=%s\n",
+		x, y,				/* x y */
+		ATTRIBUTE_COLOR,		/* color */
+		size,				/* size (points) */
+		visible, show_name_value,	/* visibility show_name_value */
+		angle, alignment, 1,		/* angle alignment num_lines */
+		name, value);			/* name value */
+}
+
+void text_add(FILE *fd, const char *text,
+		int x, int y, int color, int size, int visible,
+		int show_name_value, int angle, int alignment)
+{
+	/* TODO: num_lines set as number of '\n' */
+
+	fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n%s\n",
+		x, y,			/* x y */
+		color,			/* color */
+		size,			/* size (points) */
+		visible, show_name_value,	/* visibility show_name_value */
+		angle, alignment, 1,	/* angle alignment num_lines */
+		text);			/* text */
+}
+
+int font_size(int size)
+{
+	const int font_denom = 13;
+
+	size /= font_denom;
+	if (size != 0)
+		return size;
+
+	return 4;
+}
+
 int lib_entry_create(const char *dir_name, LibraryEntryStruct *lib_en)
 {
 	char *file_name;
@@ -262,7 +301,7 @@ int lib_entry_create(const char *dir_name, LibraryEntryStruct *lib_en)
 	LibraryFieldEntry *field;
 	LibraryDrawEntryStruct *drawing;
 	char *str;
-	int pinseq, x1, y1, size;
+	int pinseq;
 	int i;
 
 	i = sizeof(char)*(strlen(dir_name) + 1 + strlen(lib_en->Name) + 4 + 1);
@@ -291,27 +330,12 @@ int lib_entry_create(const char *dir_name, LibraryEntryStruct *lib_en)
 	fprintf(fd, "v %s %s\n", GEDA_VERSION, GEDA_FILE_VERSION);
 
 	/* Symbol attributes */
-	x1 = shift + magn*lib_en->PrefixPosX;
-	y1 = shift + magn*lib_en->PrefixPosY;
-	size = lib_en->PrefixSize/font_denom;
-	fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-			x1, y1,				/* x y */
-			ATTRIBUTE_COLOR,		/* color */
-			size,				/* size (points) */
-			lib_en->DrawPrefix, 1,	/* visibility show_name_value */
-			0, LOWER_LEFT, 1);	/* angle alignment num_lines */
-	fprintf(fd, "refdes=%s\n", lib_en->Prefix);
-
-	x1 = shift + magn*lib_en->NamePosX;
-	y1 = shift + magn*lib_en->NamePosY;
-	size = lib_en->NameSize/font_denom;
-	fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-			x1, y1,				/* x y */
-			ATTRIBUTE_COLOR,		/* color */
-			size,				/* size (points) */
-			lib_en->DrawName, 1,	/* visibility show_name_value */
-			0, LOWER_LEFT, 1);	/* angle alignment num_lines */
-	fprintf(fd, "device=%s\n", lib_en->Name);
+	attrib_add(fd, "refdes", lib_en->Prefix,
+		magn*lib_en->PrefixPosX, magn*lib_en->PrefixPosY, ATTRIBUTE_COLOR,
+		font_size(lib_en->PrefixSize), lib_en->DrawPrefix, 1, 0, LOWER_LEFT);
+	attrib_add(fd, "device", lib_en->Name,
+		magn*lib_en->NamePosX, magn*lib_en->NamePosY, ATTRIBUTE_COLOR,
+		font_size(lib_en->NameSize), lib_en->DrawName, 1, 0, LOWER_LEFT);
 
 fprintf(stderr, "WARN: skipping AliasList '%s'\n", lib_en->AliasList);
 fprintf(stderr, "WARN: skipping NameOrient %d, PrefixOrient %d\n",
@@ -323,19 +347,10 @@ fprintf(stderr, "WARN: skipping TextInside %d\n", lib_en->TextInside);
 		if ((field->Text == NULL) || (strlen(field->Text) == 0))
 			continue;
 
-		x1 = shift + magn*field->PosX;
-		y1 = shift + magn*field->PosY;
-		size = lib_en->NameSize/font_denom;
-		fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-				x1, y1,			/* x y */
-				ATTRIBUTE_COLOR,	/* color */
-				field->Size,		/* size (points) */
-				!field->Flags & TEXT_NO_VISIBLE, 0,
-						/* visibility show_name_value */
-				0, LOWER_LEFT, 1);
-						/* angle alignment num_lines */
-		fprintf(fd, "%s=%s\n",
-				field_id_str(field->FieldId), field->Text);
+		attrib_add(fd, field_id_str(field->FieldId), field->Text,
+			magn*field->PosX, magn*field->PosY, ATTRIBUTE_COLOR,
+			font_size(field->Size), !field->Flags & TEXT_NO_VISIBLE,
+			0, 0, LOWER_LEFT);
 
 fprintf(stderr, "WARN: skipping Orient %d\n", field->Orient);
 	}
@@ -348,8 +363,8 @@ fprintf(stderr, "WARN: skipping Orient %d\n", field->Orient);
 			LibraryDrawCircle *circle = &(drawing->U.Circ);
 			int x1, y1;
 
-			x1 = shift + magn*circle->x;
-			y1 = shift + magn*circle->y;
+			x1 = magn*circle->x;
+			y1 = magn*circle->y;
 			fprintf(fd, "V %d %d %d %d %d %d %d "
 						"%d %d %d %d %d %d %d %d\n",
 							/* x y radius */
@@ -367,20 +382,21 @@ fprintf(stderr, "WARN: skipping Orient %d\n", field->Orient);
 		case PIN_DRAW_TYPE: {
 			LibraryDrawPin *pin = &(drawing->U.Pin);
 			int number_align, label_align, angle = 0;
-			int x1 = shift, x2 = shift, y1 = shift, y2 = shift;
+			int x1, x2, y1, y2;
+			char str_buf[1024];
 
 			switch (pin->Orient) {
 			case 'R':
-				x1 += magn*pin->posX;
-				y1 += magn*pin->posY;
+				x1 = magn*pin->posX;
+				y1 = magn*pin->posY;
 				x2 = x1 + magn*pin->Len;
 				y2 = y1;
 				number_align = LOWER_LEFT;
 				label_align = MIDDLE_LEFT;
 				break;
 			case 'U':
-				x1 += magn*pin->posX;
-				y1 += magn*pin->posY;
+				x1 = magn*pin->posX;
+				y1 = magn*pin->posY;
 				x2 = x1;
 				y2 = y1 + magn*pin->Len;
 				angle = 90;
@@ -388,8 +404,8 @@ fprintf(stderr, "WARN: skipping Orient %d\n", field->Orient);
 				label_align = MIDDLE_LEFT;
 				break;
 			case 'D':
-				x1 += magn*pin->posX;
-				y1 += magn*pin->posY;
+				x1 = magn*pin->posX;
+				y1 = magn*pin->posY;
 				x2 = x1;
 				y2 = y1 - magn*pin->Len;
 				angle = 90;
@@ -422,54 +438,33 @@ fprintf(stderr, "WARN: skipping Orient %d\n", field->Orient);
 /* TODO: if pin is not visible, make it zero length and hide attributes */
 
 			/* Pin attributes */
-			size = pin->SizeNum/font_denom;
-			fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-					x1, y1,			/* x y */
-					ATTRIBUTE_COLOR,	/* color */
-					size,		/* size (points) */
-						/* visibility show_name_value */
-					lib_en->DrawPinNum, 1,
-						/* angle alignment num_lines */
-					angle, number_align, 1);
-			fprintf(fd, "pinnumber=%s\n", pin->Num);
+			attrib_add(fd, "pinnumber", pin->Num, 
+					magn*pin->posX, magn*pin->posY, ATTRIBUTE_COLOR,
+					font_size(pin->SizeNum), lib_en->DrawPinNum,
+					1, angle, number_align);
+			assert(sizeof(str_buf) > snprintf(str_buf, sizeof(str_buf), "%d", pinseq++));
+			attrib_add(fd, "pinseq", str_buf,
+					magn*pin->posX, magn*pin->posY, ATTRIBUTE_COLOR,
+					4, 0,
+					0, angle, MIDDLE_MIDDLE);
 
-			fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-					x1, y1,			/* x y */
-					ATTRIBUTE_COLOR,	/* color */
-					4,		/* size (points) */
-					0, 0,	/* visibility show_name_value */
-						/* angle alignment num_lines */
-					angle, MIDDLE_MIDDLE, 1);
-			fprintf(fd, "pinsec=%d\n", pinseq++);
-
-			size = pin->SizeName/font_denom;
-			fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-					x2, y2,			/* x y */
-					ATTRIBUTE_COLOR,	/* color */
-					size,		/* size (points) */
-						/* visibility show_name_value */
-					lib_en->DrawPinName, 1,
-						/* angle alignment num_lines */
-					angle, label_align, 1);
 			str = pin_name_format((pin->ReName == NULL)?
 						pin->Name: pin->ReName);
 			if (str == NULL) {
-				fprintf(fd, "pinlabel=%s\n",
-						(pin->ReName == NULL)?
+				str = strdup((pin->ReName == NULL)?
 							pin->Name: pin->ReName);
-			} else {
-				fprintf(fd, "pinlabel=%s\n", str);
-				free(str);
-			}
+			} 
+			attrib_add(fd, "pinlabel", str,
+					x2, y2,
+					ATTRIBUTE_COLOR,
+					font_size(pin->SizeName), lib_en->DrawPinName,
+					1, angle, label_align);
+			free(str);
 
-			fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n",
-					x1, y1,			/* x y */
-					ATTRIBUTE_COLOR,	/* color */
-					4,	/* size (points) */
-					0, 0,	/* visibility show_name_value */
-						/* angle alignment num_lines */
-					angle, MIDDLE_MIDDLE, 1);
-			fprintf(fd, "pintype=%s\n", pintype_str(pin->PinType));
+			attrib_add(fd, "pintype", pintype_str(pin->PinType),
+					magn*pin->posX, magn*pin->posY, ATTRIBUTE_COLOR,
+					4, 0,
+					0, angle, MIDDLE_MIDDLE);
 
 /* TODO: not all pintypes are parsed in edif.y */
 #if 0
@@ -496,13 +491,13 @@ printf("DBG: pinttype '%c' pinname '%s'\n", pin->PinType, pin->Name);
 
 			coords = poly->PolyList;
 
-			x1 = shift + magn*coords[0];
-			y1 = shift + magn*coords[1];
+			x1 = magn*coords[0];
+			y1 = magn*coords[1];
 			coords += 2;
 
 			for (i = 1; i < poly->n; i++) {
-				x2 = shift + magn*coords[0];
-				y2 = shift + magn*coords[1];
+				x2 = magn*coords[0];
+				y2 = magn*coords[1];
 				coords += 2;
 				fprintf(fd, "L %d %d %d %d %d %d %d %d %d %d\n",
 					x1, y1, x2, y2,	/* x1 y1 x2 y2 */
@@ -527,10 +522,10 @@ printf("DBG: pinttype '%c' pinname '%s'\n", pin->PinType, pin->Name);
 			LibraryDrawSquare *box = &(drawing->U.Sqr);
 			int x1, x2, y1, y2;
 
-			x1 = shift + magn*box->x1;
-			y1 = shift + magn*box->y1;
-			x2 = shift + magn*box->x2;
-			y2 = shift + magn*box->y2;
+			x1 = magn*box->x1;
+			y1 = magn*box->y1;
+			x2 = magn*box->x2;
+			y2 = magn*box->y2;
 			fprintf(fd, "B %d %d %d %d %d %d %d %d %d %d %d %d "
 						"%d %d %d %d\n",
 				min(x1, x2), min(y1, y2),	/* x y */
@@ -550,8 +545,8 @@ printf("DBG: pinttype '%c' pinname '%s'\n", pin->PinType, pin->Name);
 			LibraryDrawArc *arc = &(drawing->U.Arc);
 			int x1, y1, r, t1, t2;
 
-			x1 = shift + magn*arc->x;
-			y1 = shift + magn*arc->y;
+			x1 = magn*arc->x;
+			y1 = magn*arc->y;
 			r = magn*arc->r;
 /* TODO: recheck result with various arcs */
 printf("DBG: arc t1 %d t2 %d\n", arc->t1, arc->t2);
@@ -575,17 +570,10 @@ printf("DBG: arc t1 %d t2 %d\n", arc->t1, arc->t2);
 		}
 		case TEXT_DRAW_TYPE: {
 			LibraryDrawText *text = &(drawing->U.Text);
-			int x1, y1;
 
-			x1 = shift + magn*text->x; 
-			y1 = shift + magn*text->y; 
-			fprintf(fd, "T %d %d %d %d %d %d %d %d %d\n%s\n",
-					x1, y1,				/* x y */
-					TEXT_COLOR,			/* color */
-					text->size,		/* size (points) */
-					1, 1,			/* visibility show_name_value */
-					0, LOWER_LEFT, 1,	/* angle alignment num_lines */
-					text->Text);		/* text */
+			text_add(fd, text->Text, magn*text->x, magn*text->y,
+					TEXT_COLOR, font_size(text->size), 1,
+					1, 0, LOWER_LEFT);
 
 			if (text->Horiz) {
 				fprintf(stderr,
@@ -717,8 +705,8 @@ printf("DBG: %s()\n", __func__);
 
 static int no_open_file(FILE *fd, const char *func_name)
 {
-	if (FileSch == NULL) {
-		fprintf(stderr, "no opened file for %s()\n", func_name);
+	if (fd == NULL) {
+		dprintf("no opened file for %s()\n", func_name);
 		return 1;
 	}
 
@@ -749,18 +737,65 @@ printf("DBG: %s() %d;%d\n", __func__, x, y);
 #endif
 }
 
-void OutInst(char *refcell, char *refdes, char *value, char *foot,
+void OutInst(char *refcell, char *refdes, char *value, char *footprint,
 		char *mfgname, char *mfgpart,
-		int ts, int ox, int oy, int rx, int ry, int vx, int vy,
-		int rflg, int vflg, int unit, int *Rot)
+		int txtsize, int ox, int oy, int rx, int ry, int vx, int vy,
+		int rflg, int vflg, int unit, int Rot[2][2])
 {
-printf("DBG: %s()\n", __func__);
+	int angle = 0, mirror = 0;
+
+	if (Rot[0][0] == 0) {
+		if (Rot[0][1] == -1)
+			angle = 90;
+		else
+			angle = 270;
+	} else if (Rot[0][0] == 1) {
+		if (Rot[1][1] == 1) {
+			angle = 180;
+			mirror = 1;
+		}
+	} else if (Rot[0][0] == -1) {
+		if (Rot[1][1] == -1)
+			mirror = 1;
+		else
+			angle = 180;
+	}
+
+	/* TODO: rflag, vflag are flags for refdes and value?*/
+	/* TODO: unit != 1 for multipart */
+
+	dprintf("%s\tRot\t%d %d %d %d\n", refdes, Rot[0][0], Rot[0][1], Rot[1][0], Rot[1][1]);
+
+	if (no_open_file(FileSch, __func__))
+		return;
+
+	fprintf(FileSch, "C %d %d %d %d %d %s.sym\n",
+		shift + magn*ox, shift + magn*oy, 1,	/* x y selectable */
+		angle, mirror, refcell);		/* angle mirror basename */
+
+	txtsize = font_size(txtsize);
+
+	fprintf(FileSch, "{\n");
+	if (refdes != NULL && refdes[0] != '\0')
+		attrib_add(FileSch, "refdes", refdes, shift + magn*rx, shift + magn*ry,
+			ATTRIBUTE_COLOR, txtsize, 1, 1, 0, LOWER_LEFT);
+	if (value != NULL && value[0] != '\0')
+		attrib_add(FileSch, "value", value, shift + magn*vx, shift + magn*vy,
+			ATTRIBUTE_COLOR, txtsize, 1, 1, 0, UPPER_LEFT);
+	if (footprint != NULL && footprint[0] != '\0')
+		attrib_add(FileSch, "footprint", footprint, shift + magn*ox, shift + magn*oy,
+			ATTRIBUTE_COLOR, txtsize, 0, 1, 0, LOWER_LEFT);
+	if (mfgname != NULL && mfgname[0] != '\0')
+		attrib_add(FileSch, "mfgname", mfgname, shift + magn*ox, shift + magn*oy,
+			ATTRIBUTE_COLOR, txtsize, 0, 1, 0, LOWER_LEFT);
+	if (mfgpart != NULL && mfgpart[0] != '\0')
+		attrib_add(FileSch, "mfgpart", mfgpart, shift + magn*ox, shift + magn*oy,
+			ATTRIBUTE_COLOR, txtsize, 0, 1, 0, LOWER_LEFT);
+	fprintf(FileSch, "}\n");
 }
 
 void OutWire(int x1, int y1, int x2, int y2)
 {
-printf("DBG: %s()\n", __func__);
-
 	if (no_open_file(FileSch, __func__))
 		return;
 
@@ -774,10 +809,8 @@ printf("DBG: %s()\n", __func__);
 		NET_COLOR);	/* color width */
 }
 
-void OutText(int g, char *str, int x, int y, int size)
+void OutText(OutTextType type, char *str, int x, int y, int size)
 {
-printf("DBG: %s()\n", __func__);
-
 	if (str == NULL || *str == '\0') {
 		fprintf(stderr, "empty text in %s()\n in '%s'",
 				__func__, FileSchName);
@@ -787,22 +820,26 @@ printf("DBG: %s()\n", __func__);
 	if (no_open_file(FileSch, __func__))
 		return;
 
-	x = shift + magn*x;
-	y = shift + magn*y;
-	size = size/font_denom;
-
 /* TODO: check OutText() in savelib.c */
 
 /* TODO: add space before = if any to distinguish from attribute */
 
-	fprintf(FileSch, "T %d %d %d %d %d %d %d %d %d\n",
-			x, y,			/* x y */
-			TEXT_COLOR,		/* color */
-			size,			/* size (points) */
-			1, 0,			/* visibility show_name_value */
-			0, LOWER_LEFT, 1);	/* angle alignment num_lines */
+	switch (type) {
+	default:
+	case TEXT_LABEL_GLOBAL:
 /* TODO: remove debug info in string below */
-	fprintf(FileSch, "%s DBG: g%d\n", str, g);
+		fprintf(FileSch, "%s DBG: type%d\n", str, type);
+		/* no break */
+	case TEXT_LABEL_NORMAL:
+		/* TODO: this is net label? */
+		/* no break */
+	case TEXT_TEXT:
+		text_add(FileSch, str, shift + magn*x, shift + magn*y,
+				TEXT_COLOR, font_size(size), 1,
+				0, 0, LOWER_LEFT);
+		break;
+	}
+
 }
 
 void OutSheets(struct pwr *pgs)
