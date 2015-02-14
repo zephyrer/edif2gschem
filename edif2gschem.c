@@ -25,8 +25,8 @@ const char GEDA_FILE_VERSION[] ="2";
 
 enum {TEXT_NO_VISIBLE = 1};
 enum {FILE_NAME_LIM = 128};
-int magn = 1;
-int shift = 10000;
+const int magn = 1;
+const unsigned int shift = 20000;
 
 /* Used in edif.y */
 struct con *cons = NULL, *cptr = NULL;
@@ -770,26 +770,26 @@ void OutInst(char *refcell, char *refdes, char *value, char *footprint,
 		return;
 
 	fprintf(FileSch, "C %d %d %d %d %d %s.sym\n",
-		shift + magn*ox, shift + magn*oy, 1,	/* x y selectable */
+		shift + magn*ox, shift - magn*oy, 1,	/* x y selectable */
 		angle, mirror, refcell);		/* angle mirror basename */
 
 	txtsize = font_size(txtsize);
 
 	fprintf(FileSch, "{\n");
 	if (refdes != NULL && refdes[0] != '\0')
-		attrib_add(FileSch, "refdes", refdes, shift + magn*rx, shift + magn*ry,
+		attrib_add(FileSch, "refdes", refdes, shift + magn*rx, shift - magn*ry,
 			ATTRIBUTE_COLOR, txtsize, 1, 1, 0, LOWER_LEFT);
 	if (value != NULL && value[0] != '\0')
-		attrib_add(FileSch, "value", value, shift + magn*vx, shift + magn*vy,
+		attrib_add(FileSch, "value", value, shift + magn*vx, shift - magn*vy,
 			ATTRIBUTE_COLOR, txtsize, 1, 1, 0, UPPER_LEFT);
 	if (footprint != NULL && footprint[0] != '\0')
-		attrib_add(FileSch, "footprint", footprint, shift + magn*ox, shift + magn*oy,
+		attrib_add(FileSch, "footprint", footprint, shift + magn*ox, shift - magn*oy,
 			ATTRIBUTE_COLOR, txtsize, 0, 1, 0, LOWER_LEFT);
 	if (mfgname != NULL && mfgname[0] != '\0')
-		attrib_add(FileSch, "mfgname", mfgname, shift + magn*ox, shift + magn*oy,
+		attrib_add(FileSch, "mfgname", mfgname, shift + magn*ox, shift - magn*oy,
 			ATTRIBUTE_COLOR, txtsize, 0, 1, 0, LOWER_LEFT);
 	if (mfgpart != NULL && mfgpart[0] != '\0')
-		attrib_add(FileSch, "mfgpart", mfgpart, shift + magn*ox, shift + magn*oy,
+		attrib_add(FileSch, "mfgpart", mfgpart, shift + magn*ox, shift - magn*oy,
 			ATTRIBUTE_COLOR, txtsize, 0, 1, 0, LOWER_LEFT);
 	fprintf(FileSch, "}\n");
 }
@@ -800,9 +800,9 @@ void OutWire(int x1, int y1, int x2, int y2)
 		return;
 
 	x1 = shift + magn*x1;
-	y1 = shift + magn*y1;
+	y1 = shift - magn*y1;
 	x2 = shift + magn*x2;
-	y2 = shift + magn*y2;
+	y2 = shift - magn*y2;
 
 	fprintf(FileSch, "N %d %d %d %d %d\n",
 		x1, y1, x2, y2,	/* x1 y1 x2 y2 */
@@ -834,7 +834,7 @@ void OutText(OutTextType type, char *str, int x, int y, int size)
 		/* TODO: this is net label? */
 		/* no break */
 	case TEXT_TEXT:
-		text_add(FileSch, str, shift + magn*x, shift + magn*y,
+		text_add(FileSch, str, shift + magn*x, shift - magn*y,
 				TEXT_COLOR, font_size(size), 1,
 				0, 0, LOWER_LEFT);
 		break;
